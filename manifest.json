@@ -1,0 +1,18 @@
+{
+  "name": "Frekee - 保质期管家",
+  "short_name": "Frekee",
+  "description": "记录家中食品、药品、化妆品的保质期，到期自动提醒",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f9",
+  "theme_color": "#FF9A9E",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Crect width='1024' height='1024' fill='%23FF9A9E'/%3E%3Ctext x='512' y='512' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='300' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
