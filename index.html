@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#FF9A9E">
+<meta name="description" content="Frekee 保质期追踪 - 轻松记录，到期自动提醒">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Crect width='1024' height='1024' fill='%23FF9A9E'/%3E%3Ctext x='512' y='512' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='300' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E">
+<title>Frekee - 保质期管家</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
+<style>
+:root {
+  --bg: #f7f7f9; --surface: #ffffff; --text: #1d1d1f; --text-secondary: #8e8e93;
+  --accent: #FF7A8C; --accent-light: #FFE6E9; --warning: #f59e0b; --danger: #ef4444;
+  --border: #e5e5ea; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; padding-bottom: 120px;
+}
+.app-header {
+  background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 100%);
+  color: #2d2d2f; padding: 32px 20px 24px; border-radius: 0 0 24px 24px;
+}
+.app-title { font-size: 28px; font-weight: 800; }
+.app-subtitle { font-size: 14px; opacity: 0.8; margin-top: 4px; }
+.stats-bar { display: flex; gap: 12px; margin-top: 24px; }
+.stat-pill {
+  flex: 1; background: rgba(255,255,255,0.25); border-radius: 16px;
+  padding: 12px 8px; text-align: center; backdrop-filter: blur(10px);
+}
+.stat-num { font-size: 20px; font-weight: 700; display: block; }
+.stat-label { font-size: 11px; opacity: 0.7; display: block; }
+.place-bar {
+  display: flex; gap: 8px; padding: 12px 20px; overflow-x: auto; scrollbar-width: none;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.place-bar::-webkit-scrollbar { display: none; }
+.place-chip {
+  flex-shrink: 0; padding: 8px 16px; border-radius: 20px; background: var(--surface);
+  border: 1px solid var(--border); font-size: 13px; cursor: pointer; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.place-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+.place-chip.place-add { background: var(--bg); color: var(--accent); font-weight: 700; }
+.filter-bar {
+  display: flex; gap: 8px; padding: 10px 20px; overflow-x: auto; scrollbar-width: none;
+  background: var(--bg);
+}
+.filter-bar::-webkit-scrollbar { display: none; }
+.filter-chip {
+  flex-shrink: 0; padding: 6px 14px; border-radius: 16px; background: var(--surface);
+  border: 1px solid var(--border); font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+.container { padding: 20px; }
+.section-title { font-size: 16px; font-weight: 700; margin: 16px 20px 8px; display: flex; align-items: center; justify-content: space-between; }
+.item-list { padding: 0 20px; }
+.item-card {
+  background: var(--surface); border-radius: 16px; padding: 16px;
+  display: flex; align-items: center; gap: 14px; margin-bottom: 12px; box-shadow: var(--shadow);
+  position: relative; transition: opacity 0.3s;
+}
+.item-card.is-expired { border-left: 4px solid var(--danger); }
+.item-card.is-expired .item-name { color: var(--danger); }
+.item-card.used-done { opacity: 0.4; text-decoration: line-through; }
+.item-checkbox {
+  width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--border);
+  flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; background: var(--surface); transition: all 0.2s;
+}
+.item-checkbox:hover { border-color: var(--accent); }
+.item-checkbox.checked { background: var(--accent); border-color: var(--accent); color: white; }
+.item-thumb {
+  width: 48px; height: 48px; border-radius: 10px; background: var(--accent-light);
+  display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;
+  overflow: hidden; cursor: pointer;
+}
+.item-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.item-info { flex: 1; min-width: 0; cursor: pointer; }
+.item-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.item-meta { font-size: 12px; color: var(--text-secondary); }
+.tag { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.tag-safe { background: var(--accent-light); color: var(--accent); }
+.tag-warning { background: #fef3c7; color: var(--warning); }
+.tag-danger { background: #fee2e2; color: var(--danger); }
+.modal {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 1000;
+}
+.modal.active { display: block; }
+.modal-content {
+  position: absolute; bottom: 0; left: 0; right: 0; background: var(--surface);
+  border-radius: 24px 24px 0 0; padding: 24px 20px 40px; max-height: 90vh; overflow-y: auto;
+}
+.modal-content.centered {
+  position: absolute; top: 50%; left: 20px; right: 20px; bottom: auto;
+  transform: translateY(-50%); border-radius: 24px; max-height: 80vh;
+}
+.modal-content.full {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 0; max-height: 100vh;
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.modal-title { font-size: 18px; font-weight: 700; }
+.modal-close { width: 32px; height: 32px; border-radius: 50%; background: var(--bg); border: none; font-size: 20px; line-height: 1; cursor: pointer; }
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-secondary); }
+.form-input {
+  width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border);
+  font-size: 15px; background: var(--surface); outline: none;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-input-row { display: flex; gap: 10px; }
+.form-input-row .form-input { flex: 1; }
+.form-input-row select.form-input { flex: 0 0 90px; }
+.photo-upload {
+  border-radius: 16px; border: 2px dashed var(--border); padding: 20px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; color: var(--text-secondary); font-size: 13px; background: var(--bg);
+  cursor: pointer; overflow: hidden; position: relative; min-height: 120px;
+}
+.photo-upload.has-image { border: none; padding: 0; }
+.photo-upload img { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
+.btn-primary { width: 100%; height: 52px; background: var(--accent); color: white; border-radius: 14px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; }
+.btn-secondary { width: 100%; height: 48px; background: var(--bg); color: var(--text); border-radius: 14px; font-size: 15px; font-weight: 600; border: 1px solid var(--border); cursor: pointer; margin-top: 10px; }
+.btn-danger { width: 100%; height: 48px; background: #fee2e2; color: var(--danger); border-radius: 14px; font-size: 15px; font-weight: 600; border: 1px solid transparent; cursor: pointer; margin-top: 10px; }
+.btn-small {
+  padding: 4px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+}
+.btn-outline {
+  background: transparent; border: 1.5px solid var(--accent); color: var(--accent);
+  padding: 8px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.fab {
+  position: fixed; bottom: 90px; right: 20px; width: 56px; height: 56px; border-radius: 50%;
+  background: var(--accent); color: white; border: none; font-size: 28px;
+  box-shadow: 0 4px 16px rgba(255, 122, 140, 0.4); cursor: pointer; z-index: 100;
+}
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--surface);
+  border-top: 1px solid var(--border); padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+  z-index: 500;
+}
+.tab-item { flex: 1; text-align: center; padding: 8px 0; font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+.tab-item.active { color: var(--accent); }
+.tab-icon { display: block; font-size: 22px; margin-bottom: 2px; }
+.hidden { display: none !important; }
+.radio-group { display: flex; gap: 12px; margin-bottom: 12px; }
+.radio-option {
+  flex: 1; padding: 12px; border-radius: 12px; border: 2px solid var(--border);
+  text-align: center; font-size: 14px; cursor: pointer; background: var(--surface);
+}
+.radio-option.active { border-color: var(--accent); background: var(--accent-light); color: var(--accent); font-weight: 600; }
+.sync-status { font-size: 12px; color: var(--text-secondary); text-align: center; padding: 8px; margin-top: 12px; }
+.sync-status.online { color: var(--accent); }
+.setup-card {
+  background: var(--surface); border-radius: 16px; padding: 24px; margin-bottom: 12px;
+  border: 2px solid var(--border); cursor: pointer; text-align: center; transition: all 0.2s;
+}
+.setup-card:hover, .setup-card.active { border-color: var(--accent); background: var(--accent-light); }
+.setup-card-icon { font-size: 40px; margin-bottom: 12px; }
+.setup-card-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.setup-card-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.code-display {
+  background: var(--bg); border-radius: 12px; padding: 20px; text-align: center;
+  font-size: 28px; font-weight: 700; letter-spacing: 4px; color: var(--accent);
+  font-family: monospace; margin: 16px 0;
+}
+.detail-img { width: 100%; max-height: 300px; object-fit: cover; border-radius: 16px; margin-bottom: 16px; }
+.detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.detail-row:last-child { border: none; }
+.detail-label { color: var(--text-secondary); }
+.detail-value { font-weight: 600; }
+.cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 20px; }
+.cat-card {
+  background: var(--surface); border-radius: 16px; padding: 20px; text-align: center;
+  box-shadow: var(--shadow); cursor: pointer;
+}
+.cat-card-icon { font-size: 36px; margin-bottom: 8px; }
+.cat-card-name { font-size: 14px; font-weight: 600; }
+.cat-card-count { font-size: 12px; color: var(--text-secondary); }
+.cat-card-add { background: var(--bg); border: 2px dashed var(--border); box-shadow: none; }
+.cat-card-add .cat-card-icon { color: var(--accent); }
+.used-msg { text-align: center; padding: 12px; color: var(--accent); font-size: 13px; background: var(--accent-light); border-radius: 12px; margin-bottom: 8px; }
+
+/* Message Board */
+.msg-list { padding: 20px 20px 120px; }
+.msg-card {
+  background: var(--surface); border-radius: 16px; padding: 16px;
+  margin-bottom: 12px; box-shadow: var(--shadow); position: relative;
+}
+.msg-card.is-me { border-left: 4px solid var(--accent); }
+.msg-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.msg-avatar {
+  width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 18px; background: var(--accent-light); flex-shrink: 0;
+}
+.msg-author-info { flex: 1; }
+.msg-author { font-size: 13px; font-weight: 700; color: var(--accent); }
+.msg-time { font-size: 11px; color: var(--text-secondary); }
+.msg-text { font-size: 14px; line-height: 1.6; margin-bottom: 10px; margin-left: 42px; }
+.msg-actions { display: flex; gap: 8px; margin-left: 42px; }
+.msg-reply { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin: 8px 0 0 42px; font-size: 13px; }
+.msg-reply-author { font-weight: 600; font-size: 12px; color: var(--accent); margin-bottom: 4px; }
+.msg-input-area {
+  position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); left: 0; right: 0;
+  background: var(--surface); padding: 14px 20px; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; z-index: 300;
+}
+.msg-input { flex: 1; padding: 12px 16px; border-radius: 20px; border: 1px solid var(--border); font-size: 14px; outline: none; }
+.msg-send { padding: 0 20px; border-radius: 20px; background: var(--accent); color: white; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+/* Profile Tab */
+.profile-card {
+  background: var(--surface); border-radius: 16px; padding: 24px; margin: 20px;
+  text-align: center; box-shadow: var(--shadow);
+}
+.profile-avatar {
+  width: 72px; height: 72px; border-radius: 50%; background: var(--accent-light);
+  display: flex; align-items: center; justify-content: center; font-size: 40px;
+  margin: 0 auto 12px; cursor: pointer; border: 3px solid var(--accent);
+}
+.profile-name {
+  font-size: 20px; font-weight: 700; margin-bottom: 4px; display: flex;
+  align-items: center; justify-content: center; gap: 8px;
+}
+.profile-name-edit {
+  font-size: 14px; color: var(--accent); cursor: pointer; padding: 2px 8px;
+  border-radius: 6px; background: var(--accent-light); border: none;
+}
+.profile-section {
+  background: var(--surface); border-radius: 16px; padding: 20px; margin: 0 20px 16px;
+  box-shadow: var(--shadow);
+}
+.profile-section-title {
+  font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px;
+}
+.profile-wasted {
+  font-size: 32px; font-weight: 800; color: var(--danger); text-align: center;
+}
+.profile-wasted-label { font-size: 13px; color: var(--text-secondary); text-align: center; margin-top: 4px; }
+.profile-home-code {
+  font-size: 16px; font-weight: 700; color: var(--accent); text-align: center;
+  letter-spacing: 2px; font-family: monospace;
+}
+.profile-action-btn {
+  width: 100%; height: 48px; border-radius: 14px; font-size: 15px; font-weight: 600;
+  border: none; cursor: pointer; margin-top: 8px;
+}
+.avatar-picker {
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 12px 0;
+}
+.avatar-option {
+  width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 24px; cursor: pointer; border: 2px solid transparent;
+  background: var(--bg);
+}
+.avatar-option.active { border-color: var(--accent); background: var(--accent-light); }
+</style>
+</head>
+<body>
+
+<!-- ========== SETUP ========== -->
+<div id="setup-step1" class="modal">
+  <div class="modal-content" style="max-height:100vh;border-radius:0">
+    <div class="modal-header"><div class="modal-title">👋 欢迎使用 Frekee</div></div>
+    <p style="margin-bottom:20px;color:var(--text-secondary);font-size:14px;line-height:1.7">选择使用方式，后续可随时切换</p>
+    <div class="setup-card" onclick="selectMode('solo')">
+      <div class="setup-card-icon">🙋‍♀️</div>
+      <div class="setup-card-title">自己使用</div>
+      <div class="setup-card-desc">数据仅保存在本机</div>
+    </div>
+    <div class="setup-card" onclick="selectMode('family')">
+      <div class="setup-card-icon">👨‍👩‍👧</div>
+      <div class="setup-card-title">家庭共享</div>
+      <div class="setup-card-desc">多人实时同步数据</div>
+    </div>
+  </div>
+</div>
+
+<div id="setup-step2" class="modal">
+  <div class="modal-content" style="max-height:100vh;border-radius:0">
+    <div class="modal-header">
+      <div class="modal-title">🏠 家庭同步</div>
+      <button class="modal-close" onclick="hideEl('setup-step2');showEl('setup-step1')">‹</button>
+    </div>
+    <div class="setup-card" onclick="showCreateFamily()">
+      <div class="setup-card-icon">✨</div>
+      <div class="setup-card-title">创建新家庭</div>
+      <div class="setup-card-desc">系统生成家庭码，分享给家人</div>
+    </div>
+    <div class="setup-card" onclick="showJoinFamily()">
+      <div class="setup-card-icon">🔑</div>
+      <div class="setup-card-title">加入已有家庭</div>
+      <div class="setup-card-desc">输入已有家庭码加入</div>
+    </div>
+  </div>
+</div>
+
+<div id="setup-step3-create" class="modal">
+  <div class="modal-content" style="max-height:100vh;border-radius:0">
+    <div class="modal-header">
+      <div class="modal-title">✨ 创建家庭</div>
+      <button class="modal-close" onclick="hideEl('setup-step3-create');showEl('setup-step2')">‹</button>
+    </div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">这是你的家庭码，分享给家人即可同步</p>
+    <div class="code-display" id="generated-code">----</div>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <button class="btn-secondary" onclick="regenerateCode()" style="margin-top:0;flex:1">重新生成</button>
+      <button class="btn-secondary" onclick="copyCode()" style="margin-top:0;flex:1">复制</button>
+    </div>
+    <button class="btn-primary" onclick="confirmCreateFamily()">开始使用</button>
+  </div>
+</div>
+
+<div id="setup-step3-join" class="modal">
+  <div class="modal-content" style="max-height:100vh;border-radius:0">
+    <div class="modal-header">
+      <div class="modal-title">🔑 加入家庭</div>
+      <button class="modal-close" onclick="hideEl('setup-step3-join');showEl('setup-step2')">‹</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">家庭码</label>
+      <input class="form-input" type="text" id="join-code-input" placeholder="例如：FK-A3B7C9">
+    </div>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px">向创建家庭的成员索取家庭码</p>
+    <button class="btn-primary" onclick="confirmJoinFamily()">加入家庭</button>
+  </div>
+</div>
+
+<!-- ========== MAIN APP ========== -->
+<div id="app-main" class="hidden">
+<header class="app-header">
+  <div>
+    <h1 class="app-title">Frekee</h1>
+    <p class="app-subtitle">记录保质期，到期自动提醒</p>
+  </div>
+  <div class="sync-status" id="sync-status"></div>
+</header>
+
+<!-- Tab: Home -->
+<div id="tab-home">
+  <div class="stats-bar" id="home-stats-bar">
+    <div class="stat-pill"><span class="stat-num" id="stat-total">0</span><span class="stat-label">物品</span></div>
+    <div class="stat-pill"><span class="stat-num" style="color:var(--warning)" id="stat-warning">0</span><span class="stat-label">即将过期</span></div>
+    <div class="stat-pill"><span class="stat-num" style="color:var(--danger)" id="stat-expired">0</span><span class="stat-label">已过期</span></div>
+  </div>
+  <div class="place-bar" id="place-bar"></div>
+  <div class="filter-bar" id="filter-bar"></div>
+  <div class="used-msg hidden" id="used-msg">✅ 物品已标记为用完，1秒后移除</div>
+  <div class="item-list" id="warning-list"></div>
+  <div class="section-title" id="home-section-title">全部物品</div>
+  <div class="item-list" id="all-list"></div>
+  <div class="empty-state" id="empty-state">
+    <div style="font-size:48px;display:block;margin-bottom:12px">📦</div>
+    <div>还没有添加物品<br><small>点击右下角 + 开始添加</small></div>
+  </div>
+</div>
+
+<!-- Tab: Category -->
+<div id="tab-category" class="hidden">
+  <div id="cat-grid" class="cat-grid"></div>
+</div>
+
+<!-- Tab: Profile (我的) -->
+<div id="tab-profile" class="hidden">
+  <div class="profile-card">
+    <div class="profile-avatar" id="profile-avatar-display" onclick="showAvatarPicker()">😊</div>
+    <div class="profile-name">
+      <span id="profile-name-text">用户</span>
+      <button class="profile-name-edit" onclick="editUserName()">✏️ 改名字</button>
+    </div>
+  </div>
+
+  <div class="profile-section">
+    <div class="profile-section-title">💰 累计浪费</div>
+    <div class="profile-wasted" id="profile-wasted-amount">¥0</div>
+    <div class="profile-wasted-label">基于已过期物品的总价</div>
+  </div>
+
+  <div class="profile-section" id="profile-family-section">
+    <div class="profile-section-title">🏠 家庭同步</div>
+    <div class="profile-home-code" id="profile-home-code">未设置</div>
+    <div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-top:6px">将此码分享给家人即可加入</div>
+  </div>
+
+  <div style="padding:0 20px;margin-top:12px;margin-bottom:80px">
+    <button class="profile-action-btn" style="background:var(--accent);color:white" onclick="switchMode()">🔄 切换使用模式</button>
+  </div>
+</div>
+
+<!-- Tab: Messages (family mode only) -->
+<div id="tab-messages" class="hidden">
+  <div class="section-title">家庭留言板</div>
+  <div class="msg-list" id="msg-list"></div>
+  <div class="empty-state" id="msg-empty">
+    <div style="font-size:48px;display:block;margin-bottom:12px">💬</div>
+    <div>还没有留言<br><small>在下方输入框发送第一条留言</small></div>
+  </div>
+  <div style="height:120px"></div>
+</div>
+
+<!-- Message Input (fixed bottom above tab bar) -->
+<div id="msg-input-area" class="msg-input-area hidden">
+  <input class="msg-input" type="text" id="msg-input" placeholder="给家人们留言..." onkeydown="if(event.key==='Enter')sendMsg()">
+  <button class="msg-send" onclick="sendMsg()">发送</button>
+</div>
+
+<!-- Add Item Modal -->
+<div id="add-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">添加物品</div>
+      <button class="modal-close" onclick="hideEl('add-modal')">×</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">物品照片（选填）</label>
+      <div class="photo-upload" id="photo-box" onclick="document.getElementById('item-photo-input').click()">
+        <input type="file" id="item-photo-input" accept="image/*" capture="environment" hidden>
+        <div id="photo-preview"></div>
+        <div id="photo-placeholder"><span style="font-size:32px">📷</span><span>拍照或选择图片</span></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">物品名称</label>
+      <input class="form-input" type="text" id="item-name" placeholder="例如：伊利纯牛奶">
+    </div>
+    <div class="form-group">
+      <label class="form-label">分类</label>
+      <div style="display:flex;gap:8px">
+        <select class="form-input" id="item-category" style="flex:1"></select>
+        <button type="button" class="btn-secondary" onclick="showAddCategory()" style="margin-top:0;width:auto;padding:0 16px;flex-shrink:0;white-space:nowrap">+ 新分类</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">场所</label>
+      <select class="form-input" id="item-place"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">价格（元，选填）</label>
+      <input class="form-input" type="number" id="item-price" placeholder="例如：25.5" min="0" step="0.01">
+    </div>
+    <div class="form-group">
+      <label class="form-label">保质期录入方式</label>
+      <div class="radio-group">
+        <div class="radio-option active" id="mode-direct" onclick="setExpiryMode('direct')">直接填到期日</div>
+        <div class="radio-option" id="mode-calc" onclick="setExpiryMode('calc')">生产日期+时长</div>
+      </div>
+    </div>
+    <div id="direct-inputs">
+      <div class="form-group">
+        <label class="form-label">保质期至</label>
+        <input class="form-input" type="date" id="item-expiry">
+      </div>
+    </div>
+    <div id="calc-inputs" class="hidden">
+      <div class="form-group">
+        <label class="form-label">生产日期</label>
+        <input class="form-input" type="date" id="item-production">
+      </div>
+      <div class="form-group">
+        <label class="form-label">保质期时长</label>
+        <div class="form-input-row">
+          <input class="form-input" type="number" id="duration-value" placeholder="180" min="1">
+          <select class="form-input" id="duration-unit">
+            <option value="day">天</option>
+            <option value="month">个月</option>
+            <option value="year">年</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">计算结果</label>
+        <input class="form-input" type="date" id="calc-expiry" readonly style="background:var(--bg)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">提前几天提醒</label>
+      <input class="form-input" type="number" id="item-remind" value="7" min="1" max="365">
+    </div>
+    <button class="btn-primary" onclick="saveCurrentItem()">保存</button>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div id="detail-modal" class="modal">
+  <div class="modal-content full">
+    <div class="modal-header">
+      <button class="modal-close" onclick="hideEl('detail-modal')">‹ 返回</button>
+      <div class="modal-title">物品详情</div>
+      <button class="modal-close" onclick="enterEditMode()">编辑</button>
+    </div>
+    <div id="detail-body" style="padding:0 20px 20px;overflow-y:auto;max-height:calc(100vh - 80px)"></div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">编辑物品</div>
+      <button class="modal-close" onclick="hideEl('edit-modal')">×</button>
+    </div>
+    <div id="edit-body"></div>
+    <button class="btn-primary" onclick="saveEdit()">保存修改</button>
+    <button class="btn-danger" onclick="deleteEdit()">删除物品</button>
+  </div>
+</div>
+
+<!-- Add Category Modal -->
+<div id="add-cat-modal" class="modal">
+  <div class="modal-content centered">
+    <div class="modal-header"><div class="modal-title">添加分类</div><button class="modal-close" onclick="hideEl('add-cat-modal')">×</button></div>
+    <div class="form-group">
+      <label class="form-label">分类名称</label>
+      <input class="form-input" type="text" id="new-cat-name" placeholder="例如：宠物用品">
+    </div>
+    <div class="form-group">
+      <label class="form-label">图标</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='🍔'">🍔</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='💊'">💊</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='💄'">💄</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='🧴'">🧴</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='🐕'">🐕</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='🍼'">🍼</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='🧹'">🧹</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-cat-icon').value='📦'">📦</span>
+      </div>
+      <input type="hidden" id="new-cat-icon" value="📦">
+    </div>
+    <button class="btn-primary" onclick="confirmAddCategory()">添加</button>
+  </div>
+</div>
+
+<!-- Add Place Modal -->
+<div id="add-place-modal" class="modal">
+  <div class="modal-content centered">
+    <div class="modal-header"><div class="modal-title">添加场所</div><button class="modal-close" onclick="hideEl('add-place-modal')">×</button></div>
+    <div class="form-group">
+      <label class="form-label">场所名称</label>
+      <input class="form-input" type="text" id="new-place-name" placeholder="例如：储藏室">
+    </div>
+    <div class="form-group">
+      <label class="form-label">图标</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='🏠'">🏠</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='❄️'">❄️</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='🏢'">🏢</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='🚗'">🚗</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='🎒'">🎒</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='📦'">📦</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='🏖️'">🏖️</span>
+        <span style="font-size:28px;cursor:pointer;padding:4px;border-radius:8px" onclick="document.getElementById('new-place-icon').value='💼'">💼</span>
+      </div>
+      <input type="hidden" id="new-place-icon" value="📦">
+    </div>
+    <button class="btn-primary" onclick="confirmAddPlace()">添加</button>
+  </div>
+</div>
+
+<!-- Avatar Picker Modal -->
+<div id="avatar-picker-modal" class="modal">
+  <div class="modal-content centered">
+    <div class="modal-header"><div class="modal-title">选择头像</div><button class="modal-close" onclick="hideEl('avatar-picker-modal')">×</button></div>
+    <div class="avatar-picker" id="avatar-picker-grid"></div>
+    <button class="btn-primary" style="margin-top:16px" onclick="hideEl('avatar-picker-modal')">确定</button>
+  </div>
+</div>
+
+<button class="fab" id="fab-btn">+</button>
+
+<div class="tab-bar" id="tab-bar">
+  <div class="tab-item active" onclick="switchTab('home')"><span class="tab-icon">🏠</span><span>首页</span></div>
+  <div class="tab-item" onclick="switchTab('category')"><span class="tab-icon">📂</span><span>分类</span></div>
+  <div class="tab-item hidden" id="tab-msg-btn" onclick="switchTab('messages')"><span class="tab-icon">💬</span><span>留言板</span></div>
+  <div class="tab-item" onclick="switchTab('profile')"><span class="tab-icon">👤</span><span>我的</span></div>
+</div>
+</div><!-- /app-main -->
+
+<script>
+// ==================== CONFIG ====================
+const SUPABASE_URL = 'https://mwyrkmlzrhiolwxrxsko.supabase.co'
+const SUPABASE_KEY = 'sb_publishable_PCAeLI1Zk3-ScuF2CX8gdg_axW0Xuyx'
+
+const DEFAULT_CATEGORIES = [
+  { key:'food', name:'食品', icon:'🍔', color:'#d1fae5' },
+  { key:'medicine', name:'药品', icon:'💊', color:'#dbeafe' },
+  { key:'cosmetic', name:'化妆品', icon:'💄', color:'#fce7f3' },
+  { key:'daily', name:'日用品', icon:'🧴', color:'#fef3c7' }
+]
+const DEFAULT_PLACES = [
+  { id: 'home', name: '家', icon: '🏠' },
+  { id: 'office', name: '公司', icon: '🏢' }
+]
+
+const AVATAR_OPTIONS = ['😊','😄','😎','🤩','🥰','😇','🤗','🥳','😺','🦊','🐶','🐱','🐼','🐨','🦄','🌸','🌟','🎀','🌈','🍀']
+
+const LS = {
+  items: 'frekee-items-v4',
+  code: 'frekee-home-code',
+  cats: 'frekee-categories-v2',
+  places: 'frekee-places-v2',
+  mode: 'frekee-mode',
+  setup: 'frekee-setup-done',
+  messages: 'frekee-messages-v1',
+  username: 'frekee-username',
+  avatar: 'frekee-avatar',
+  device: 'frekee-device-id'
+}
+
+let items = [], photoData = null, expiryMode = 'direct'
+let homeCode = '', supabase = null, syncChannel = null
+let places = [], categories = [], currentPlaceId = 'all', currentFilter = 'all', currentTab = 'home'
+let tempGeneratedCode = '', editingItemId = null
+let messages = []
+let userName = ''
+
+// ==================== HELPERS ====================
+function showEl(id) { document.getElementById(id).classList.add('active') }
+function hideEl(id) { document.getElementById(id).classList.remove('active') }
+function lsGet(k) { try { return JSON.parse(localStorage.getItem(k)) } catch(e) { return null } }
+function lsSet(k, v) { localStorage.setItem(k, JSON.stringify(v)) }
+function genId() { return Date.now().toString() + Math.random().toString(36).substr(2,4) }
+function getMode() { return localStorage.getItem(LS.mode) || '' }
+function getDeviceId() {
+  let id = localStorage.getItem(LS.device)
+  if (!id) { id = 'dev_' + Date.now().toString(36) + Math.random().toString(36).substr(2,6); localStorage.setItem(LS.device, id) }
+  return id
+}
+
+// ==================== DATA MIGRATION ====================
+function migrateStorage() {
+  const oldKeys = ['frekee-items', 'frekee-items-v2', 'frekee-items-v3',
+    'frekee-places', 'frekee-categories']
+  oldKeys.forEach(k => localStorage.removeItem(k))
+  const savedPlaces = lsGet(LS.places)
+  if (savedPlaces) {
+    const hasOld = savedPlaces.some(p => ['fridge','car'].includes(p.id))
+    if (hasOld) localStorage.removeItem(LS.places)
+  }
+  if (!lsGet(LS.cats)) lsSet(LS.cats, DEFAULT_CATEGORIES)
+  if (!lsGet(LS.places)) lsSet(LS.places, DEFAULT_PLACES)
+}
+
+// ==================== USER PROFILE ====================
+function getUserName() {
+  if (!userName) {
+    userName = localStorage.getItem(LS.username)
+    if (!userName) {
+      userName = '家人' + Math.floor(Math.random() * 1000)
+      localStorage.setItem(LS.username, userName)
+    }
+  }
+  return userName
+}
+
+function setUserName(name) {
+  userName = name
+  localStorage.setItem(LS.username, name)
+  document.getElementById('profile-name-text').textContent = name
+  if (currentTab === 'messages') renderMessages()
+}
+
+function editUserName() {
+  const current = getUserName()
+  const name = prompt('请输入你的名字：', current)
+  if (name && name.trim()) {
+    setUserName(name.trim())
+  }
+}
+
+function getAvatar() {
+  return localStorage.getItem(LS.avatar) || '😊'
+}
+
+function setAvatar(emoji) {
+  localStorage.setItem(LS.avatar, emoji)
+  document.getElementById('profile-avatar-display').textContent = emoji
+  if (currentTab === 'messages') renderMessages()
+}
+
+function showAvatarPicker() {
+  const grid = document.getElementById('avatar-picker-grid')
+  const current = getAvatar()
+  grid.innerHTML = AVATAR_OPTIONS.map(e =>
+    `<div class="avatar-option ${e === current ? 'active' : ''}" onclick="selectAvatar('${e}')">${e}</div>`
+  ).join('')
+  showEl('avatar-picker-modal')
+}
+
+function selectAvatar(emoji) {
+  document.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('active'))
+  event.target.classList.add('active')
+  setAvatar(emoji)
+}
+
+// ==================== SUPABASE ====================
+function initSupabase() {
+  if (SUPABASE_URL.includes('YOUR_PROJECT')) return false
+  try { supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); return true }
+  catch(e) { return false }
+}
+async function syncToCloud() {
+  if (!supabase || !homeCode) return
+  const { error } = await supabase.from('homes').upsert(
+    { home_code: homeCode, data: { items, places, categories, messages }, updated_at: new Date().toISOString() },
+    { onConflict: 'home_code' }
+  )
+  if (error) console.error('Sync error', error)
+}
+async function syncFromCloud() {
+  if (!supabase || !homeCode) return
+  const { data, error } = await supabase.from('homes').select('data').eq('home_code', homeCode).single()
+  if (error || !data || !data.data) return
+  const remote = data.data
+  if (Array.isArray(remote)) { items = remote; syncToCloud() }
+  else {
+    if (remote.items && remote.items.length > items.length) items = remote.items
+    if (remote.places) { places = remote.places; lsSet(LS.places, places) }
+    if (remote.categories) { categories = remote.categories; lsSet(LS.cats, categories) }
+    if (remote.messages) { messages = remote.messages; lsSet(LS.messages, messages) }
+  }
+  saveLocal(); refreshAll()
+}
+function startRealtimeSync() {
+  if (!supabase || !homeCode) return
+  syncChannel = supabase.channel('homes:' + homeCode)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'homes', filter: 'home_code=eq.' + homeCode }, payload => {
+      if (!payload.new || !payload.new.data) return
+      const remote = payload.new.data
+      if (Array.isArray(remote)) { items = remote }
+      else {
+        items = remote.items || []
+        if (remote.places) { places = remote.places; lsSet(LS.places, places) }
+        if (remote.categories) { categories = remote.categories; lsSet(LS.cats, categories) }
+        if (remote.messages) { messages = remote.messages; lsSet(LS.messages, messages) }
+      }
+      saveLocal(); refreshAll()
+    })
+    .subscribe(status => {
+      const el = document.getElementById('sync-status')
+      if (!el) return
+      el.textContent = status === 'SUBSCRIBED' ? '✅ 家庭同步已连接' : '⚠️ 同步断开'
+      el.classList.toggle('online', status === 'SUBSCRIBED')
+    })
+}
+
+// ==================== LOCAL STORAGE ====================
+function saveLocal() { lsSet(LS.items, { items, places, categories, messages }) }
+function loadAllData() {
+  const s = lsGet(LS.items)
+  if (!s) return { items: [], places: [], categories: [], messages: [] }
+  if (Array.isArray(s)) return { items: s, places: lsGet(LS.places) || DEFAULT_PLACES, categories: lsGet(LS.cats) || DEFAULT_CATEGORIES, messages: lsGet(LS.messages) || [] }
+  return { items: s.items || [], places: s.places || [], categories: s.categories || [], messages: s.messages || [] }
+}
+function loadHomeCode() { return localStorage.getItem(LS.code) || '' }
+function saveHomeCode(c) { homeCode = c; localStorage.setItem(LS.code, c) }
+function isSetupDone() { return localStorage.getItem(LS.setup) === '1' }
+function markSetupDone() { localStorage.setItem(LS.setup, '1') }
+
+// ==================== SETUP FLOW ====================
+function selectMode(mode) {
+  localStorage.setItem(LS.mode, mode)
+  if (mode === 'solo') { saveHomeCode(''); markSetupDone(); enterApp() }
+  else { hideEl('setup-step1'); showEl('setup-step2') }
+}
+function showCreateFamily() {
+  tempGeneratedCode = genHomeCode()
+  document.getElementById('generated-code').textContent = tempGeneratedCode
+  hideEl('setup-step2'); showEl('setup-step3-create')
+}
+function showJoinFamily() { hideEl('setup-step2'); showEl('setup-step3-join') }
+function genHomeCode() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let r = ''
+  for (let i = 0; i < 6; i++) r += c[Math.floor(Math.random() * c.length)]
+  return 'FK-' + r
+}
+function regenerateCode() { tempGeneratedCode = genHomeCode(); document.getElementById('generated-code').textContent = tempGeneratedCode }
+function copyCode() { navigator.clipboard.writeText(tempGeneratedCode).then(() => alert('已复制：' + tempGeneratedCode)) }
+function confirmCreateFamily() {
+  // Clear old data so new family starts fresh
+  items = []; messages = []; places = [...DEFAULT_PLACES]; categories = [...DEFAULT_CATEGORIES]
+  lsSet(LS.items, { items, places, categories, messages })
+  lsSet(LS.places, places)
+  lsSet(LS.cats, categories)
+  saveHomeCode(tempGeneratedCode); markSetupDone(); enterApp()
+}
+function confirmJoinFamily() {
+  const code = document.getElementById('join-code-input').value.trim().toUpperCase()
+  if (!code) { alert('请输入家庭码'); return }
+  // Clear local data when joining a new family, so we load from cloud
+  items = []; messages = []; places = [...DEFAULT_PLACES]; categories = [...DEFAULT_CATEGORIES]
+  lsSet(LS.items, { items, places, categories, messages })
+  lsSet(LS.places, places)
+  lsSet(LS.cats, categories)
+  saveHomeCode(code); markSetupDone(); enterApp()
+}
+function enterApp() {
+  ['setup-step1','setup-step2','setup-step3-create','setup-step3-join'].forEach(hideEl)
+  document.getElementById('app-main').classList.remove('hidden')
+  initApp()
+}
+function switchMode() {
+  if (!confirm('确定要切换使用模式吗？数据不会丢失。')) return
+  localStorage.removeItem(LS.code); localStorage.removeItem(LS.mode); localStorage.removeItem(LS.setup)
+  if (syncChannel) { syncChannel.unsubscribe(); syncChannel = null }
+  location.reload()
+}
+
+// ==================== TAB SWITCH ====================
+function switchTab(tab) {
+  currentTab = tab
+  const isFamily = getMode() === 'family'
+  const tabIds = isFamily ? ['home','category','messages','profile'] : ['home','category','profile']
+  const btns = document.querySelectorAll('.tab-item')
+  btns.forEach((b,i) => { b.classList.toggle('active', tabIds[i] === tab) })
+
+  document.getElementById('tab-home').classList.toggle('hidden', tab !== 'home')
+  document.getElementById('tab-category').classList.toggle('hidden', tab !== 'category')
+  document.getElementById('tab-profile').classList.toggle('hidden', tab !== 'profile')
+  document.getElementById('tab-messages').classList.toggle('hidden', tab !== 'messages')
+
+  // Show/hide home-only elements
+  const fab = document.getElementById('fab-btn')
+  const placeBar = document.getElementById('place-bar')
+  const filterBar = document.getElementById('filter-bar')
+  const homeStats = document.getElementById('home-stats-bar')
+  if (tab === 'home') {
+    fab.classList.remove('hidden')
+    placeBar.classList.remove('hidden')
+    filterBar.classList.remove('hidden')
+    homeStats.classList.remove('hidden')
+  } else {
+    fab.classList.add('hidden')
+    placeBar.classList.add('hidden')
+    filterBar.classList.add('hidden')
+    homeStats.classList.add('hidden')
+  }
+
+  // Msg input area only on messages tab
+  const msgInputArea = document.getElementById('msg-input-area')
+  if (msgInputArea) {
+    if (isFamily && tab === 'messages') msgInputArea.classList.remove('hidden')
+    else msgInputArea.classList.add('hidden')
+  }
+
+  if (tab === 'category') renderCatGrid()
+  if (tab === 'home') {
+    currentFilter = 'all'; renderFilterBar(); render()
+    document.getElementById('home-section-title').textContent = '全部物品'
+  }
+  if (tab === 'messages') { renderMessages() }
+  if (tab === 'profile') { renderProfile() }
+}
+
+// ==================== TAB BAR (MODE-AWARE) ====================
+function updateTabBar() {
+  const msgBtn = document.getElementById('tab-msg-btn')
+  if (getMode() === 'family') {
+    msgBtn.classList.remove('hidden')
+  } else {
+    msgBtn.classList.add('hidden')
+    if (currentTab === 'messages') switchTab('home')
+  }
+}
+
+// ==================== PROFILE ====================
+function renderProfile() {
+  document.getElementById('profile-name-text').textContent = getUserName()
+  document.getElementById('profile-avatar-display').textContent = getAvatar()
+  // Wasted amount
+  const wasted = items.filter(i => getItemStatus(i.expiryDate).status === 'danger').reduce((s,i) => s + (parseFloat(i.price)||0), 0)
+  document.getElementById('profile-wasted-amount').textContent = wasted > 0 ? '¥' + wasted.toFixed(1) : '¥0'
+  // Home code
+  const codeEl = document.getElementById('profile-home-code')
+  const sectionEl = document.getElementById('profile-family-section')
+  if (getMode() === 'family' && homeCode) {
+    codeEl.textContent = homeCode
+    sectionEl.classList.remove('hidden')
+  } else {
+    sectionEl.classList.add('hidden')
+  }
+}
+
+// ==================== PLACES ====================
+function getPlaceInfo(id) {
+  if (id === 'all') return { id:'all', name:'全部', icon:'📍' }
+  return places.find(p => p.id === id) || { id, name: id, icon:'📦' }
+}
+function renderPlaceBar() {
+  if (currentTab !== 'home') return
+  const chips = [{ id:'all', name:'全部', icon:'📍' }, ...places]
+    .map(p => `<div class="place-chip ${currentPlaceId===p.id?'active':''}" onclick="setCurrentPlace('${p.id}')">${p.icon} ${p.name}</div>`).join('')
+  document.getElementById('place-bar').innerHTML = chips + '<div class="place-chip place-add" onclick="showEl(\'add-place-modal\')">+</div>'
+}
+function setCurrentPlace(id) { currentPlaceId = id; renderPlaceBar(); render(); updateStats() }
+function confirmAddPlace() {
+  const name = document.getElementById('new-place-name').value.trim()
+  const icon = document.getElementById('new-place-icon').value
+  if (!name) { alert('请输入名称'); return }
+  places.push({ id:'place_'+genId(), name, icon })
+  lsSet(LS.places, places); saveLocal(); syncToCloud(); renderPlaceBar(); populateSelects()
+  document.getElementById('new-place-name').value = ''
+  hideEl('add-place-modal')
+}
+
+// ==================== CATEGORIES ====================
+function getCatInfo(key) { return categories.find(c => c.key === key) || { key, name:key, icon:'📦', color:'#e5e7eb' } }
+function renderCatGrid() {
+  const filtered = getFilteredItems()
+  document.getElementById('cat-grid').innerHTML = categories.map(cat => {
+    const count = filtered.filter(i => i.category === cat.key).length
+    return `<div class="cat-card" onclick="goCategory('${cat.key}')">
+      <div class="cat-card-icon">${cat.icon}</div>
+      <div class="cat-card-name">${cat.name}</div>
+      <div class="cat-card-count">${count} 件</div>
+    </div>`
+  }).join('') + '<div class="cat-card cat-card-add" onclick="showAddCategory()"><div class="cat-card-icon">+</div><div class="cat-card-name">添加分类</div></div>'
+}
+function showAddCategory() { showEl('add-cat-modal') }
+function confirmAddCategory() {
+  const name = document.getElementById('new-cat-name').value.trim()
+  const icon = document.getElementById('new-cat-icon').value
+  if (!name) { alert('请输入分类名称'); return }
+  categories.push({ key:'cat_'+genId(), name, icon, color:'#e5e7eb' })
+  lsSet(LS.cats, categories); saveLocal(); syncToCloud(); populateSelects(); renderCatGrid()
+  document.getElementById('new-cat-name').value = ''
+  hideEl('add-cat-modal')
+}
+function goCategory(key) {
+  currentFilter = 'all'; renderFilterBar()
+  const cat = getCatInfo(key)
+  const filtered = getFilteredItems().filter(i => i.category === key)
+  document.getElementById('warning-list').innerHTML = ''
+  document.getElementById('empty-state').style.display = filtered.length === 0 ? 'block' : 'none'
+  document.getElementById('home-section-title').textContent = cat.icon + ' ' + cat.name
+  document.getElementById('all-list').innerHTML = filtered.sort((a,b) => getDaysDiff(new Date(), a.expiryDate) - getDaysDiff(new Date(), b.expiryDate)).map(renderItemCard).join('')
+  switchTab('home')
+}
+
+// ==================== FILTER ====================
+function renderFilterBar() {
+  if (currentTab !== 'home') return
+  const filters = [
+    { id:'all', name:'全部' },
+    { id:'safe', name:'未过期' },
+    { id:'warning', name:'即将过期' },
+    { id:'danger', name:'已过期' }
+  ]
+  document.getElementById('filter-bar').innerHTML = filters.map(f =>
+    `<div class="filter-chip ${currentFilter===f.id?'active':''}" onclick="setFilter('${f.id}')">${f.name}</div>`
+  ).join('')
+}
+function setFilter(id) { currentFilter = id; renderFilterBar(); render(); updateStats() }
+
+// ==================== CORE LOGIC ====================
+function getDaysDiff(d1, d2) {
+  return Math.ceil((new Date(d2).setHours(0,0,0,0) - new Date(d1).setHours(0,0,0,0)) / 86400000)
+}
+function getItemStatus(expiryDate) {
+  const days = getDaysDiff(new Date(), expiryDate)
+  if (days < 0) return { status:'danger', label:'已过期', days }
+  if (days <= 7) return { status:'warning', label: days + '天后', days }
+  return { status:'safe', label: days + '天后', days }
+}
+function getFilteredItems() {
+  let r = currentPlaceId === 'all' ? [...items] : items.filter(i => i.placeId === currentPlaceId)
+  if (currentFilter !== 'all') r = r.filter(i => getItemStatus(i.expiryDate).status === currentFilter)
+  return r
+}
+function saveItems() { saveLocal(); syncToCloud(); refreshAll() }
+function refreshAll() { updateStats(); render(); renderPlaceBar(); renderFilterBar(); renderCatGrid(); if (currentTab === 'messages') renderMessages(); if (currentTab === 'profile') renderProfile() }
+
+function updateStats() {
+  const f = getFilteredItems()
+  document.getElementById('stat-total').textContent = f.length
+  document.getElementById('stat-warning').textContent = f.filter(i => getItemStatus(i.expiryDate).status === 'warning').length
+  document.getElementById('stat-expired').textContent = f.filter(i => getItemStatus(i.expiryDate).status === 'danger').length
+}
+
+function renderItemCard(item) {
+  const cat = getCatInfo(item.category)
+  const place = getPlaceInfo(item.placeId)
+  const { status, label } = getItemStatus(item.expiryDate)
+  const tc = status === 'safe' ? 'tag-safe' : status === 'warning' ? 'tag-warning' : 'tag-danger'
+  const expiredClass = status === 'danger' ? ' is-expired' : ''
+  const priceStr = item.price ? ' ¥' + item.price : ''
+  const thumbHTML = (item.image && item.image.length > 20)
+    ? `<img src="${item.image}">` : cat.icon
+  return `<div class="item-card${expiredClass}" data-id="${item.id}">
+    <div class="item-checkbox" onclick="event.stopPropagation();markUsed('${item.id}')"></div>
+    <div class="item-thumb" onclick="viewDetail('${item.id}')">${thumbHTML}</div>
+    <div class="item-info" onclick="viewDetail('${item.id}')">
+      <div class="item-name">${item.name}${priceStr}</div>
+      <div class="item-meta">${cat.icon} ${cat.name} · ${item.expiryDate} · ${place.icon} ${place.name}</div>
+    </div>
+    <span class="tag ${tc}" onclick="viewDetail('${item.id}')">${label}</span>
+  </div>`
+}
+
+function render() {
+  const f = getFilteredItems()
+  f.sort((a,b) => getDaysDiff(new Date(), a.expiryDate) - getDaysDiff(new Date(), b.expiryDate))
+  const wa = f.filter(i => getItemStatus(i.expiryDate).status === 'warning')
+  document.getElementById('warning-list').innerHTML = wa.map(renderItemCard).join('')
+  document.getElementById('all-list').innerHTML = f.map(renderItemCard).join('')
+  document.getElementById('empty-state').style.display = f.length === 0 ? 'block' : 'none'
+}
+
+function markUsed(id) {
+  const card = document.querySelector(`.item-card[data-id="${id}"]`)
+  if (!card || card.querySelector('.item-checkbox.checked')) return
+  card.querySelector('.item-checkbox').classList.add('checked')
+  card.querySelector('.item-checkbox').textContent = '✓'
+  card.classList.add('used-done')
+  const name = (items.find(i=>i.id===id)||{}).name || '物品'
+  const msg = document.getElementById('used-msg')
+  msg.classList.remove('hidden')
+  msg.textContent = '✅ ' + name + ' 已标记为用完'
+  setTimeout(() => { items = items.filter(i => i.id !== id); saveItems(); msg.classList.add('hidden') }, 1000)
+}
+
+// ==================== PHOTO ====================
+function handlePhotoUpload(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = function(ev) {
+    photoData = ev.target.result
+    document.getElementById('photo-preview').innerHTML = '<img src="' + photoData + '">'
+    document.getElementById('photo-box').classList.add('has-image')
+  }
+  reader.readAsDataURL(file)
+}
+
+// ==================== EXPIRY MODE ====================
+function setExpiryMode(mode) {
+  expiryMode = mode
+  document.getElementById('mode-direct').classList.toggle('active', mode === 'direct')
+  document.getElementById('mode-calc').classList.toggle('active', mode === 'calc')
+  document.getElementById('direct-inputs').classList.toggle('hidden', mode !== 'direct')
+  document.getElementById('calc-inputs').classList.toggle('hidden', mode !== 'calc')
+}
+function calcExpiryDate() {
+  const prod = document.getElementById('item-production').value
+  const val = parseInt(document.getElementById('duration-value').value)
+  const unit = document.getElementById('duration-unit').value
+  if (!prod || !val) { document.getElementById('calc-expiry').value = ''; return }
+  const d = new Date(prod)
+  if (unit === 'day') d.setDate(d.getDate() + val)
+  if (unit === 'month') d.setMonth(d.getMonth() + val)
+  if (unit === 'year') d.setFullYear(d.getFullYear() + val)
+  document.getElementById('calc-expiry').value = d.toISOString().split('T')[0]
+}
+
+// ==================== ADD ITEM ====================
+function openAddModal() {
+  setExpiryMode('direct')
+  document.getElementById('item-name').value = ''
+  document.getElementById('item-category').value = ''
+  document.getElementById('item-place').value = ''
+  document.getElementById('item-expiry').value = ''
+  document.getElementById('item-price').value = ''
+  document.getElementById('item-production').value = ''
+  document.getElementById('duration-value').value = ''
+  document.getElementById('calc-expiry').value = ''
+  document.getElementById('item-remind').value = '7'
+  photoData = null
+  document.getElementById('photo-preview').innerHTML = ''
+  document.getElementById('photo-box').classList.remove('has-image')
+  populateSelects()
+  showEl('add-modal')
+}
+function saveCurrentItem() {
+  const name = document.getElementById('item-name').value.trim()
+  const category = document.getElementById('item-category').value
+  const placeId = document.getElementById('item-place').value
+  const price = parseFloat(document.getElementById('item-price').value) || 0
+  const remind = parseInt(document.getElementById('item-remind').value) || 7
+  let expiry = ''
+  if (expiryMode === 'direct') { expiry = document.getElementById('item-expiry').value }
+  else { calcExpiryDate(); expiry = document.getElementById('calc-expiry').value }
+  if (!name || !category || !expiry) { alert('请填写物品名称、分类和保质期'); return }
+  items.push({
+    id: genId(), name, category, placeId,
+    productionDate: expiryMode === 'calc' ? document.getElementById('item-production').value : '',
+    expiryDate: expiry, price,
+    image: photoData || '',
+    remindDays: [remind],
+    createdAt: new Date().toISOString()
+  })
+  saveItems()
+  hideEl('add-modal')
+}
+
+// ==================== DETAIL ====================
+function viewDetail(id) {
+  editingItemId = id
+  const item = items.find(i => i.id === id)
+  if (!item) return
+  const cat = getCatInfo(item.category)
+  const place = getPlaceInfo(item.placeId)
+  const { status, label } = getItemStatus(item.expiryDate)
+  const statusColor = status==='danger' ? 'var(--danger)' : status==='warning' ? 'var(--warning)' : 'var(--accent)'
+  const imgHTML = (item.image && item.image.length > 20) ? '<img src="' + item.image + '" class="detail-img">' : ''
+  let html = imgHTML
+  html += `<div class="detail-row"><span class="detail-label">名称</span><span class="detail-value">${item.name}</span></div>`
+  html += `<div class="detail-row"><span class="detail-label">分类</span><span class="detail-value">${cat.icon} ${cat.name}</span></div>`
+  html += `<div class="detail-row"><span class="detail-label">场所</span><span class="detail-value">${place.icon} ${place.name}</span></div>`
+  html += `<div class="detail-row"><span class="detail-label">价格</span><span class="detail-value">${item.price ? '¥'+item.price : '--'}</span></div>`
+  html += `<div class="detail-row"><span class="detail-label">到期日</span><span class="detail-value">${item.expiryDate}</span></div>`
+  html += `<div class="detail-row"><span class="detail-label">状态</span><span class="detail-value" style="color:${statusColor}">${label}</span></div>`
+  if (item.productionDate) html += `<div class="detail-row"><span class="detail-label">生产日期</span><span class="detail-value">${item.productionDate}</span></div>`
+  html += `<div class="detail-row"><span class="detail-label">提醒</span><span class="detail-value">提前${item.remindDays?item.remindDays[0]:7}天</span></div>`
+  html += `<div class="detail-row"><span class="detail-label">添加时间</span><span class="detail-value">${new Date(item.createdAt).toLocaleDateString('zh-CN')}</span></div>`
+  document.getElementById('detail-body').innerHTML = html
+  showEl('detail-modal')
+}
+
+// ==================== EDIT ====================
+function enterEditMode() {
+  hideEl('detail-modal')
+  const item = items.find(i => i.id === editingItemId)
+  if (!item) return
+  const body = document.getElementById('edit-body')
+  body.innerHTML = `
+    <div class="form-group"><label class="form-label">物品名称</label><input class="form-input" type="text" id="edit-name" value="${item.name}"></div>
+    <div class="form-group"><label class="form-label">分类</label><select class="form-input" id="edit-category">${categories.map(c=>'<option value="'+c.key+'"'+(c.key===item.category?' selected':'')+'>'+c.icon+' '+c.name+'</option>').join('')}</select></div>
+    <div class="form-group"><label class="form-label">场所</label><select class="form-input" id="edit-place">${places.map(p=>'<option value="'+p.id+'"'+(p.id===item.placeId?' selected':'')+'>'+p.icon+' '+p.name+'</option>').join('')}</select></div>
+    <div class="form-group"><label class="form-label">价格（元）</label><input class="form-input" type="number" id="edit-price" value="${item.price||''}" min="0" step="0.01"></div>
+    <div class="form-group"><label class="form-label">保质期至</label><input class="form-input" type="date" id="edit-expiry" value="${item.expiryDate}"></div>
+    <div class="form-group"><label class="form-label">提前几天提醒</label><input class="form-input" type="number" id="edit-remind" value="${item.remindDays?item.remindDays[0]:7}" min="1" max="365"></div>
+  `
+  showEl('edit-modal')
+}
+function saveEdit() {
+  const item = items.find(i => i.id === editingItemId)
+  if (!item) return
+  item.name = document.getElementById('edit-name').value.trim() || item.name
+  item.category = document.getElementById('edit-category').value
+  item.placeId = document.getElementById('edit-place').value
+  item.price = parseFloat(document.getElementById('edit-price').value) || 0
+  item.expiryDate = document.getElementById('edit-expiry').value || item.expiryDate
+  item.remindDays = [parseInt(document.getElementById('edit-remind').value) || 7]
+  saveItems(); hideEl('edit-modal')
+}
+function deleteEdit() {
+  const item = items.find(i => i.id === editingItemId)
+  if (!item || !confirm('确定删除 ' + item.name + ' 吗？')) return
+  items = items.filter(i => i.id !== editingItemId)
+  saveItems(); hideEl('edit-modal')
+}
+
+// ==================== POPULATE SELECTS ====================
+function populateSelects() {
+  document.getElementById('item-category').innerHTML = '<option value="">选择分类</option>' + categories.map(c => '<option value="'+c.key+'">'+c.icon+' '+c.name+'</option>').join('')
+  document.getElementById('item-place').innerHTML = places.map(p => '<option value="'+p.id+'">'+p.icon+' '+p.name+'</option>').join('')
+}
+
+// ==================== MESSAGE BOARD ====================
+function renderMessages() {
+  const list = document.getElementById('msg-list')
+  const empty = document.getElementById('msg-empty')
+  if (!messages.length) { list.innerHTML = ''; empty.style.display = 'block'; return }
+  empty.style.display = 'none'
+  list.innerHTML = messages.slice().reverse().map(m => renderMsgCard(m)).join('')
+}
+function renderMsgCard(m) {
+  const isMe = m.deviceId === getDeviceId()
+  const displayName = isMe ? getUserName() : (m.author || '未知')
+  const displayAvatar = isMe ? getAvatar() : (m.avatar || '😊')
+  const replyHTML = m.reply ? `<div class="msg-reply"><div class="msg-reply-author">回复 ${m.replyTo || '留言'}</div>${escapeHtml(m.reply)}</div>` : ''
+  return `<div class="msg-card ${isMe ? 'is-me' : ''}" id="msg-${m.id}">
+    <div class="msg-header">
+      <div class="msg-avatar">${displayAvatar}</div>
+      <div class="msg-author-info">
+        <div class="msg-author">${escapeHtml(displayName)}</div>
+        <div class="msg-time">${formatTime(m.time)}</div>
+      </div>
+      <div class="msg-actions">
+        <button class="btn-small" onclick="replyToMsg('${m.id}')">回复</button>
+        ${isMe ? '<button class="btn-small" onclick="deleteMsg(\'' + m.id + '\')">删除</button>' : ''}
+      </div>
+    </div>
+    <div class="msg-text">${escapeHtml(m.text)}</div>
+    ${replyHTML}
+  </div>`
+}
+function sendMsg() {
+  const input = document.getElementById('msg-input')
+  const text = input.value.trim()
+  if (!text) return
+  const replyingTo = window.__replyingTo
+  const newMsg = {
+    id: genId(),
+    deviceId: getDeviceId(),
+    author: getUserName(),
+    avatar: getAvatar(),
+    text: text,
+    time: new Date().toISOString(),
+    reply: replyingTo ? replyingTo.text : '',
+    replyTo: replyingTo ? replyingTo.author : ''
+  }
+  messages.push(newMsg)
+  input.value = ''
+  window.__replyingTo = null
+  input.placeholder = '给家人们留言...'
+  saveLocal(); syncToCloud(); renderMessages()
+}
+function replyToMsg(id) {
+  const m = messages.find(x => x.id === id)
+  if (!m) return
+  window.__replyingTo = m
+  const input = document.getElementById('msg-input')
+  input.placeholder = '回复 ' + m.author + '...'
+  input.focus()
+}
+function deleteMsg(id) {
+  const m = messages.find(x => x.id === id)
+  if (!m || m.deviceId !== getDeviceId()) { alert('只能删除自己的留言'); return }
+  if (!confirm('确定删除这条留言吗？')) return
+  messages = messages.filter(x => x.id !== id)
+  saveLocal(); syncToCloud(); renderMessages()
+}
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+function formatTime(iso) {
+  const d = new Date(iso)
+  const now = new Date()
+  const diff = Math.floor((now - d) / 60000)
+  if (diff < 1) return '刚刚'
+  if (diff < 60) return diff + '分钟前'
+  if (diff < 1440) return Math.floor(diff/60) + '小时前'
+  return d.toLocaleDateString('zh-CN') + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0')
+}
+
+// ==================== INIT ====================
+async function initApp() {
+  const hasSupabase = initSupabase()
+  homeCode = loadHomeCode()
+  const saved = loadAllData()
+  items = saved.items || []
+  places = saved.places.length ? saved.places : DEFAULT_PLACES
+  categories = saved.categories.length ? saved.categories : DEFAULT_CATEGORIES
+  messages = saved.messages || []
+  lsSet(LS.places, places)
+  lsSet(LS.cats, categories)
+
+  updateTabBar()
+  renderPlaceBar(); renderFilterBar(); populateSelects(); renderCatGrid(); renderProfile()
+
+  // Initially hide home-only elements on other tabs
+  const fab = document.getElementById('fab-btn')
+  const placeBar = document.getElementById('place-bar')
+  const filterBar = document.getElementById('filter-bar')
+  const homeStats = document.getElementById('home-stats-bar')
+  if (currentTab === 'home') {
+    fab.classList.remove('hidden')
+    placeBar.classList.remove('hidden')
+    filterBar.classList.remove('hidden')
+    homeStats.classList.remove('hidden')
+  }
+
+  const msgInputArea = document.getElementById('msg-input-area')
+  if (msgInputArea) {
+    if (getMode() === 'family' && currentTab === 'messages') msgInputArea.classList.remove('hidden')
+    else msgInputArea.classList.add('hidden')
+  }
+
+  if (hasSupabase && homeCode) {
+    document.getElementById('profile-home-code').textContent = homeCode
+    await syncFromCloud()
+    startRealtimeSync()
+  } else {
+    const s = document.getElementById('sync-status')
+    if (s) s.textContent = getMode() === 'solo' ? '📴 本地模式' : '⚠️ 未配置同步'
+  }
+  updateStats(); render(); checkReminders()
+}
+
+function checkReminders() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  items.forEach(item => {
+    const days = getDaysDiff(new Date(), item.expiryDate)
+    if (item.remindDays && item.remindDays.includes(days))
+      new Notification('Frekee提醒：' + item.name, { body: '还有 ' + days + ' 天过期' })
+  })
+}
+
+// ==================== BOOT ====================
+migrateStorage()
+
+if (isSetupDone()) {
+  enterApp()
+} else {
+  showEl('setup-step1')
+}
+
+// Event listeners for calc inputs
+document.getElementById('item-production').addEventListener('change', calcExpiryDate)
+document.getElementById('duration-value').addEventListener('input', calcExpiryDate)
+document.getElementById('duration-unit').addEventListener('change', calcExpiryDate)
+document.getElementById('item-photo-input').addEventListener('change', handlePhotoUpload)
+
+if ('Notification' in window) Notification.requestPermission()
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(()=>{}))
+}
+</script>
+</body>
+</html>
